@@ -459,7 +459,7 @@ public class PooledByteBufAllocator extends AbstractByteBufAllocator implements 
                 }
                 return cache;
             }
-            // No caching for non FastThreadLocalThreads.
+            // No caching so jus use 0 as sizes.
             return new PoolThreadCache(heapArena, directArena, 0, 0, 0, 0, 0);
         }
 

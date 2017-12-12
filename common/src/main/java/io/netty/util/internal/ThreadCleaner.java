@@ -21,6 +21,10 @@ import java.security.AccessController;
 import java.security.PrivilegedAction;
 import java.util.Set;
 
+/**
+ * Allows a way to register some {@link Runnable} that will executed once there are no references to the {@link Thread}
+ * anymore. This typically happens once the {@link Thread} dies / completes.
+ */
 public final class ThreadCleaner {
 
     // This will hold a reference to the ThreadCleanerReference which will be removed once we called cleanup()
@@ -62,15 +66,18 @@ public final class ThreadCleaner {
     /**
      * Register the given {@link Thread} for which the {@link Runnable} will be executed once there are no references
      * to the object anymore, which typically happens once the {@link Thread} dies.
+     *
+     * This should only be used if there are no other ways to execute some cleanup once the {@link Thread} dies as
+     * its not a cheap way to handle the cleanup.
      */
-    public static void register(Thread thread, final Runnable cleanupTask) {
+    public static void register(Thread thread, Runnable cleanupTask) {
         ThreadCleanerReference reference = new ThreadCleanerReference(thread,
                 ObjectUtil.checkNotNull(cleanupTask, "cleanupTask"));
         LIVE_SET.add(reference);
     }
 
     private ThreadCleaner() {
-        // Only contain static methods.
+        // Only contains a  static method.
     }
 
     private static final class ThreadCleanerReference extends WeakReference<Thread> {
