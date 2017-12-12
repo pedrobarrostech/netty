@@ -240,7 +240,7 @@ public class PooledByteBufAllocatorTest extends AbstractByteBufAllocatorTest<Poo
         assertFalse(lists.get(5).iterator().hasNext());
     }
 
-    @Test (timeout = 400000)
+    @Test (timeout = 4000)
     public void testThreadCacheDestroyedByThreadCleaner() throws InterruptedException {
         testThreadCacheDestroyed(false);
     }
