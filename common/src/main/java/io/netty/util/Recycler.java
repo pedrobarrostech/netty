@@ -275,7 +275,7 @@ public abstract class Recycler<T> {
         static WeakOrderQueue allocate(Stack<?> stack, Thread thread) {
             // We allocated a Link so reserve the space
             return reserveSpace(stack.availableSharedCapacity, LINK_CAPACITY)
-                    ? WeakOrderQueue.newQueue(stack, thread) : null;
+                    ? newQueue(stack, thread) : null;
         }
 
         private static boolean reserveSpace(AtomicInteger availableSharedCapacity, int space) {
@@ -416,7 +416,10 @@ public abstract class Recycler<T> {
         // to scavenge those that can be reused. this permits us to incur minimal thread synchronisation whilst
         // still recycling all items.
         final Recycler<T> parent;
-        final Thread thread;
+
+        // We store the Thread in a WeakReference as otherwise we may be the only ones that still hold a strong
+        // Reference to the Thread itself after it died.
+        final WeakReference<Thread> threadRef;
         final AtomicInteger availableSharedCapacity;
         final int maxDelayedQueues;
 
@@ -431,7 +434,7 @@ public abstract class Recycler<T> {
         Stack(Recycler<T> parent, Thread thread, int maxCapacity, int maxSharedCapacityFactor,
               int ratioMask, int maxDelayedQueues) {
             this.parent = parent;
-            this.thread = thread;
+            threadRef = new WeakReference<Thread>(thread);
             this.maxCapacity = maxCapacity;
             availableSharedCapacity = new AtomicInteger(max(maxCapacity / maxSharedCapacityFactor, LINK_CAPACITY));
             elements = new DefaultHandle[min(INITIAL_CAPACITY, maxCapacity)];
@@ -545,7 +548,7 @@ public abstract class Recycler<T> {
 
         void push(DefaultHandle<?> item) {
             Thread currentThread = Thread.currentThread();
-            if (thread == currentThread) {
+            if (threadRef.get() == currentThread) {
                 // The current Thread is the thread that belongs to the Stack, we can try to push the object now.
                 pushNow(item);
             } else {

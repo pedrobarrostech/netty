@@ -22,6 +22,7 @@ import io.netty.util.concurrent.FastThreadLocalThread;
 import io.netty.util.internal.PlatformDependent;
 import io.netty.util.internal.StringUtil;
 import io.netty.util.internal.SystemPropertyUtil;
+import io.netty.util.internal.ThreadCleaner;
 import io.netty.util.internal.logging.InternalLogger;
 import io.netty.util.internal.logging.InternalLoggerFactory;
 
@@ -300,7 +301,7 @@ public class PooledByteBufAllocator extends AbstractByteBufAllocator implements 
     @Override
     protected ByteBuf newHeapBuffer(int initialCapacity, int maxCapacity) {
         PoolThreadCache cache = threadCache.get();
-        PoolArena<byte[]> heapArena = cache.heapArena();
+        PoolArena<byte[]> heapArena = cache.heapArena;
 
         final ByteBuf buf;
         if (heapArena != null) {
@@ -317,7 +318,7 @@ public class PooledByteBufAllocator extends AbstractByteBufAllocator implements 
     @Override
     protected ByteBuf newDirectBuffer(int initialCapacity, int maxCapacity) {
         PoolThreadCache cache = threadCache.get();
-        PoolArena<ByteBuffer> directArena = cache.directArena();
+        PoolArena<ByteBuffer> directArena = cache.directArena;
 
         final ByteBuf buf;
         if (directArena != null) {
@@ -442,12 +443,19 @@ public class PooledByteBufAllocator extends AbstractByteBufAllocator implements 
                 // the ThreadDeathWatcher to release memory from the PoolThreadCache once the Thread dies.
                 boolean needsCleanupOnGC = fastThread ?
                         !((FastThreadLocalThread) current).willCleanupFastThreadLocals() : true;
-                PoolThreadCache cache = new PoolThreadCache(
+                final PoolThreadCache cache = new PoolThreadCache(
                         heapArena, directArena, tinyCacheSize, smallCacheSize, normalCacheSize,
                         DEFAULT_MAX_CACHED_BUFFER_CAPACITY, DEFAULT_CACHE_TRIM_INTERVAL);
+
                 if (needsCleanupOnGC) {
-                    // Register for cleanup when the PoolThreadCache is ready for been collected.
-                    cache.registerCleanupTask();
+                    // The thread-local cache will keep a list of pooled buffers which must be returned to
+                    // the pool when the thread is not alive anymore.
+                    ThreadCleaner.register(Thread.currentThread(), new Runnable() {
+                        @Override
+                        public void run() {
+                            cache.free();
+                        }
+                    });
                 }
                 return cache;
             }

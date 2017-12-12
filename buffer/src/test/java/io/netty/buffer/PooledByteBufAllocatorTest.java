@@ -241,7 +241,7 @@ public class PooledByteBufAllocatorTest extends AbstractByteBufAllocatorTest<Poo
     }
 
     @Test (timeout = 400000)
-    public void testThreadCacheDestroyedByAutomaticCleanupReference() throws InterruptedException {
+    public void testThreadCacheDestroyedByThreadCleaner() throws InterruptedException {
         testThreadCacheDestroyed(false);
     }
 
@@ -296,7 +296,7 @@ public class PooledByteBufAllocatorTest extends AbstractByteBufAllocatorTest<Poo
 
         // Wait for the ThreadDeathWatcher to have destroyed all thread caches
         while (allocator.metric().numThreadLocalCaches() > 0) {
-            // Signal we want to have a GC run to ensure we can process our AutomaticCleanupReference
+            // Signal we want to have a GC run to ensure we can process our ThreadCleanerReference
             System.gc();
             System.runFinalization();
             LockSupport.parkNanos(MILLISECONDS.toNanos(100));

@@ -18,27 +18,41 @@ package io.netty.util.internal;
 import org.junit.Assert;
 import org.junit.Test;
 
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-public class AutomaticCleanupReferenceTest {
+public class ThreadCleanerTest {
 
-    private Object temporaryObject;
+    private Thread temporaryThread;
 
     @Test(timeout = 5000)
     public void testCleanup() throws Exception {
-        temporaryObject = new Object();
-
         final AtomicBoolean freeCalled = new AtomicBoolean();
-        AutomaticCleanupReference.register(temporaryObject, new Runnable() {
+        final CountDownLatch latch = new CountDownLatch(1);
+        temporaryThread = new Thread(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    latch.await();
+                } catch (InterruptedException ignore) {
+                    // just ignore
+                }
+            }
+        });
+        temporaryThread.start();
+        ThreadCleaner.register(temporaryThread, new Runnable() {
             @Override
             public void run() {
                 freeCalled.set(true);
             }
         });
 
+        latch.countDown();
+        temporaryThread.join();
         Assert.assertFalse(freeCalled.get());
+
         // Null out the temporary object to ensure it is enqueued for GC.
-        temporaryObject = null;
+        temporaryThread = null;
 
         while (!freeCalled.get()) {
             System.gc();

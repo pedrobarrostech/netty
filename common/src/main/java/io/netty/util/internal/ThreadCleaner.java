@@ -19,15 +19,12 @@ import java.lang.ref.ReferenceQueue;
 import java.lang.ref.WeakReference;
 import java.security.AccessController;
 import java.security.PrivilegedAction;
-
 import java.util.Set;
 
-/**
- * Special {@link WeakReference} that will be cleaned automatically by a background thread.
- */
-public final class AutomaticCleanupReference extends WeakReference<Object> {
-    // This will hold a reference to the AutomaticCleanupReference which will be removed once we called cleanup()
-    private static final Set<AutomaticCleanupReference> LIVE_SET = new ConcurrentSet<AutomaticCleanupReference>();
+public final class ThreadCleaner {
+
+    // This will hold a reference to the ThreadCleanerReference which will be removed once we called cleanup()
+    private static final Set<ThreadCleanerReference> LIVE_SET = new ConcurrentSet<ThreadCleanerReference>();
     private static final ReferenceQueue<Object> REFERENCE_QUEUE = new ReferenceQueue<Object>();
 
     static {
@@ -39,8 +36,8 @@ public final class AutomaticCleanupReference extends WeakReference<Object> {
                     public void run() {
                         for (;;) {
                             try {
-                                AutomaticCleanupReference reference =
-                                        (AutomaticCleanupReference) REFERENCE_QUEUE.remove();
+                                ThreadCleanerReference reference =
+                                        (ThreadCleanerReference) REFERENCE_QUEUE.remove();
                                 try {
                                     reference.cleanup();
                                 } finally {
@@ -53,7 +50,8 @@ public final class AutomaticCleanupReference extends WeakReference<Object> {
                     }
                 });
                 cleanupThread.setPriority(Thread.MIN_PRIORITY);
-                cleanupThread.setName("AutomaticCleanupReference-Thread");
+                cleanupThread.setContextClassLoader(null);
+                cleanupThread.setName("ThreadCleanerReaper");
                 cleanupThread.setDaemon(true);
                 cleanupThread.start();
                 return null;
@@ -61,34 +59,41 @@ public final class AutomaticCleanupReference extends WeakReference<Object> {
         });
     }
 
-    private final Runnable cleanupTask;
-
-    private AutomaticCleanupReference(Object referent, ReferenceQueue<Object> refQueue, Runnable cleanupTask) {
-        super(referent, refQueue);
-        this.cleanupTask = cleanupTask;
-    }
-
-    @Override
-    public void clear() {
-        super.clear();
-        LIVE_SET.remove(this);
-    }
-
     /**
-     * Do any cleanup actions for this {@link AutomaticCleanupReference}.
+     * Register the given {@link Thread} for which the {@link Runnable} will be executed once there are no references
+     * to the object anymore, which typically happens once the {@link Thread} dies.
      */
-    private void cleanup() {
-        if (cleanupTask != null) {
+    public static void register(Thread thread, final Runnable cleanupTask) {
+        ThreadCleanerReference reference = new ThreadCleanerReference(thread,
+                ObjectUtil.checkNotNull(cleanupTask, "cleanupTask"));
+        LIVE_SET.add(reference);
+    }
+
+    private ThreadCleaner() {
+        // Only contain static methods.
+    }
+
+    private static final class ThreadCleanerReference extends WeakReference<Thread> {
+        private final Runnable cleanupTask;
+
+        ThreadCleanerReference(Thread referent, Runnable cleanupTask) {
+            super(referent, REFERENCE_QUEUE);
+            this.cleanupTask = cleanupTask;
+        }
+
+        void cleanup() {
             cleanupTask.run();
         }
-    }
 
-    /**
-     * Register the given {@link Object} for which the {@link Runnable} will be executed once there are no references
-     * to the object anymore.
-     */
-    public static void register(Thread object, Runnable cleanupTask) {
-        AutomaticCleanupReference ref = new AutomaticCleanupReference(object, REFERENCE_QUEUE, cleanupTask);
-        LIVE_SET.add(ref);
+        @Override
+        public Thread get() {
+            return null;
+        }
+
+        @Override
+        public void clear() {
+            LIVE_SET.remove(this);
+            super.clear();
+        }
     }
 }
